@@ -1,9 +1,11 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { ethers } from 'ethers'
 
 type Bindings = {
   ARC_RPC_URL: string
   METADATA_ENCRYPTION_SECRET: string
+  SCORER_PRIVATE_KEY: string
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -244,6 +246,132 @@ app.post('/api/ipfs/upload', async (c) => {
     timestamp: Date.now(),
     note: 'Content-addressed hash. For IPFS pinning, use a pinning service (Pinata, web3.storage) with this data.'
   })
+})
+
+// Submit score onchain — calls CreditScore.updateFromMetrics using SCORER_ROLE
+// This endpoint fetches wallet metrics from RPC, computes the score, and writes it onchain
+app.post('/api/score/submit', async (c) => {
+  const body = await c.req.json()
+  const rawWallet = body?.wallet
+  if (!rawWallet) return c.json({ error: 'Wallet address is required' }, 400)
+
+  // Normalize address — ethers requires valid checksum; using getAddress(lower) fixes it
+  let wallet: string
+  try {
+    wallet = ethers.getAddress(rawWallet.toLowerCase())
+  } catch {
+    return c.json({ error: 'Invalid wallet address' }, 400)
+  }
+
+  const rpcUrl = c.env?.ARC_RPC_URL || 'https://rpc.testnet.arc.network'
+  const scorerKey = c.env?.SCORER_PRIVATE_KEY
+  if (!scorerKey) {
+    return c.json({ error: 'Scorer key not configured' }, 500)
+  }
+
+  try {
+    const provider = new ethers.JsonRpcProvider(rpcUrl, 5042002)
+    const scorer = new ethers.Wallet(scorerKey, provider)
+
+    // CreditScore contract
+    const CREDIT_SCORE_ADDR = '0x172787626C50490E983008d798A45D9461C97a04'
+    const scoreContract = new ethers.Contract(CREDIT_SCORE_ADDR, [
+      'function updateFromMetrics(address,tuple(uint32,uint32,uint32,uint32,uint32,uint64),string,bytes32) external',
+      'function getScore(address) view returns (uint256)',
+      'function metrics(address) view returns (uint32,uint32,uint32,uint32,uint32,uint64)'
+    ], scorer)
+
+    // Check current onchain score
+    const currentScore = await scoreContract.getScore(wallet)
+
+    // Fetch wallet activity from RPC
+    const txCountResp = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionCount', params: [wallet, 'latest'] })
+    })
+    const txCountData = await txCountResp.json() as any
+    const txCount = parseInt(txCountData.result || '0', 16)
+
+    // Derive metrics from onchain activity
+    // On testnet, give wallets a minimum onboarding boost so they can participate
+    // This ensures new wallets on Arc Testnet can create positions with fair scores
+    // Base score (300) + txComponent needs to reach at least 500 for Fair tier
+    // txFrequency=50 => min(50*4,220)=200, total=500
+    const TESTNET_MIN_TX_FREQ = 50  // Gives 200 tx component points
+    const TESTNET_MIN_DEFI = 5      // Gives 30 defi component points
+    const rawTxFreq = Math.min(txCount * 100, 5500)
+    const txFrequency = Math.max(rawTxFreq, TESTNET_MIN_TX_FREQ)
+    const defiInteractionCount = Math.max(Math.floor(txCount * 0.3), TESTNET_MIN_DEFI)
+    const avgGasUsed = txCount > 0 ? 150000 : 0
+
+    // Get existing onchain metrics (to preserve repayment/default history)
+    let existingRepayments = 0
+    let existingDefaults = 0
+    try {
+      const existing = await scoreContract.metrics(wallet)
+      existingRepayments = Number(existing[2])
+      existingDefaults = Number(existing[3])
+    } catch {}
+
+    const metricsStruct = {
+      txFrequency,
+      defiInteractionCount,
+      successfulRepayments: existingRepayments,
+      defaults: existingDefaults,
+      avgGasUsed,
+      measuredAt: Math.floor(Date.now() / 1000)
+    }
+
+    // Compute expected score
+    const base = 300
+    const txComp = Math.min(txFrequency * 4, 220)
+    const defiComp = Math.min(defiInteractionCount * 6, 180)
+    const repayComp = Math.min(existingRepayments * 35, 280)
+    const defPenalty = Math.min(existingDefaults * 120, 420)
+    const gasPenalty = avgGasUsed > 350000 ? Math.min(Math.floor((avgGasUsed - 350000) / 1000), 80) : 0
+    const rawScore = base + txComp + defiComp + repayComp
+    const expectedScore = Math.min(Math.max(rawScore - defPenalty - gasPenalty, 0), 1000)
+
+    // Generate evidence hash
+    const encoder = new TextEncoder()
+    const evidenceData = encoder.encode(JSON.stringify({ wallet, txCount, metrics: metricsStruct, timestamp: Date.now() }))
+    const hashBuffer = await crypto.subtle.digest('SHA-256', evidenceData)
+    const evidenceHash = '0x' + Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
+
+    // Submit onchain via SCORER_ROLE
+    const tx = await scoreContract.updateFromMetrics(
+      wallet,
+      [
+        metricsStruct.txFrequency,
+        metricsStruct.defiInteractionCount,
+        metricsStruct.successfulRepayments,
+        metricsStruct.defaults,
+        metricsStruct.avgGasUsed,
+        metricsStruct.measuredAt
+      ],
+      `arc-score://${wallet.toLowerCase()}`,
+      evidenceHash
+    )
+    const receipt = await tx.wait()
+
+    // Read updated score
+    const newScore = await scoreContract.getScore(wallet)
+
+    return c.json({
+      success: true,
+      wallet,
+      previousScore: Number(currentScore),
+      newScore: Number(newScore),
+      expectedScore,
+      txHash: receipt.hash,
+      metrics: metricsStruct,
+      timestamp: Date.now()
+    })
+  } catch (err: any) {
+    console.error('Score submit error:', err)
+    return c.json({ error: err.shortMessage || err.message || 'Failed to submit score onchain' }, 500)
+  }
 })
 
 // Serve main HTML page

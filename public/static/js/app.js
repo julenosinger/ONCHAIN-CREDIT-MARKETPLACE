@@ -418,7 +418,8 @@ const AppState = {
               </div>
               <div class="form-group">
                 <label class="form-label">Minimum Credit Score</label>
-                <input type="number" id="orig-minScore" class="form-input" value="450" min="0" max="1000">
+                <input type="number" id="orig-minScore" class="form-input" value="0" min="0" max="1000">
+                <span class="text-xs opacity-50 mt-1 block">Set to 0 for no minimum requirement. Your onchain score must meet this threshold.</span>
               </div>
             </div>
 
@@ -985,6 +986,49 @@ const AppState = {
         maxLtvBps: requireCollateral ? Number(document.getElementById('orig-maxLtv')?.value || '7000') : 0,
         tokenURI: metaResult.metadataURI
       };
+
+      // Auto-submit onchain score if minimumScore > 0
+      if (Number(minScore) > 0) {
+        Toast.show('Verifying your onchain credit score...', 'info');
+        try {
+          // Check current onchain score
+          const currentOnchainScore = await ContractManager.getScore(WalletManager.address);
+          console.log('Current onchain score:', currentOnchainScore);
+          
+          if (currentOnchainScore < Number(minScore)) {
+            // Try to update score onchain via backend
+            Toast.show('Updating your onchain credit score...', 'info');
+            const submitResp = await fetch('/api/score/submit', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ wallet: WalletManager.address })
+            });
+            const submitResult = await submitResp.json();
+            
+            if (submitResult.error) {
+              throw new Error(`Score submission failed: ${submitResult.error}`);
+            }
+            
+            console.log('Score updated onchain:', submitResult);
+            
+            // Check if the new score meets the minimum
+            if (submitResult.newScore < Number(minScore)) {
+              Toast.show(
+                `Your onchain credit score (${submitResult.newScore}) is below the minimum (${minScore}). ` +
+                `Try lowering the Minimum Credit Score or increase your onchain activity.`, 
+                'warning'
+              );
+              return;
+            }
+            
+            Toast.show(`Onchain score updated to ${submitResult.newScore}!`, 'success');
+          }
+        } catch (scoreErr) {
+          console.warn('Score check/update warning:', scoreErr);
+          // If we can't verify, warn but let the user try anyway
+          Toast.show('Could not verify onchain score. Attempting transaction anyway...', 'warning');
+        }
+      }
 
       Toast.show('Submitting transaction to Arc Network...', 'info');
 

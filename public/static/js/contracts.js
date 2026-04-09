@@ -259,6 +259,37 @@ const ContractManager = {
       throw new Error(validationErrors.join('\n'));
     }
 
+    // Check onchain score and auto-submit if needed
+    const requiredScore = params.minimumScore || 0;
+    if (requiredScore > 0) {
+      try {
+        const onchainScore = await this.getScore(WalletManager.address);
+        if (onchainScore < requiredScore) {
+          Toast.show(`Onchain score (${onchainScore}) is below required (${requiredScore}). Registering your score onchain...`, 'info');
+          const submitResp = await fetch('/api/score/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wallet: WalletManager.address })
+          });
+          const submitResult = await submitResp.json();
+          if (submitResult.error) {
+            throw new Error(`Failed to register onchain score: ${submitResult.error}`);
+          }
+          Toast.show(`Score registered onchain: ${submitResult.newScore}/1000 (TX: ${submitResult.txHash.slice(0, 12)}...)`, 'success');
+
+          // Check if new score meets requirement
+          if (submitResult.newScore < requiredScore) {
+            throw new Error(`Your onchain credit score (${submitResult.newScore}) is still below the minimum required (${requiredScore}). Try lowering the minimum score requirement or increase your onchain activity.`);
+          }
+        }
+      } catch (scoreErr) {
+        if (scoreErr.message.includes('onchain credit score') || scoreErr.message.includes('Failed to register')) {
+          throw scoreErr;
+        }
+        console.warn('Score check failed, proceeding anyway:', scoreErr);
+      }
+    }
+
     // If collateral is required, check allowance and approve if needed
     if (params.collateralRequired && params.collateralToken !== ethers.ZeroAddress) {
       try {
