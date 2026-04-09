@@ -32,7 +32,7 @@ const PrivacyManager = {
     }
   },
 
-  // Upload data to IPFS (content-addressed)
+  // Upload data to content-addressed storage (hash-based)
   async uploadToIPFS(data) {
     try {
       const resp = await fetch('/api/ipfs/upload', {
@@ -40,20 +40,22 @@ const PrivacyManager = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data })
       });
-      return await resp.json();
+      const result = await resp.json();
+      if (result.error) throw new Error(result.error);
+      return result;
     } catch (err) {
-      console.error('IPFS upload failed:', err);
-      throw new Error('Failed to upload to IPFS');
+      console.error('Content hash upload failed:', err);
+      throw new Error('Failed to generate content hash');
     }
   },
 
-  // Full privacy flow: encrypt + upload + generate hash
+  // Full privacy flow: encrypt + hash + generate metadata URI
   async processPrivateMetadata(rawMetadata) {
     // Step 1: Encrypt
     const encrypted = await this.encryptMetadata(rawMetadata);
 
-    // Step 2: Upload encrypted data to IPFS
-    const ipfsResult = await this.uploadToIPFS(encrypted.encrypted);
+    // Step 2: Upload encrypted data to content-addressed storage
+    const hashResult = await this.uploadToIPFS(encrypted.encrypted);
 
     // Step 3: Generate keccak256 hash for onchain verification
     const encoder = new TextEncoder();
@@ -63,10 +65,9 @@ const PrivacyManager = {
     const metadataHash = '0x' + Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('');
 
     return {
-      metadataURI: ipfsResult.uri,
+      metadataURI: hashResult.uri || `sha256://${hashResult.contentHash}`,
       metadataHash,
       contentHash: encrypted.contentHash,
-      cid: ipfsResult.cid,
       encrypted: true,
       timestamp: Date.now()
     };
@@ -74,7 +75,7 @@ const PrivacyManager = {
 
   // Public metadata flow (no encryption)
   async processPublicMetadata(rawMetadata) {
-    const ipfsResult = await this.uploadToIPFS(rawMetadata);
+    const hashResult = await this.uploadToIPFS(rawMetadata);
 
     const encoder = new TextEncoder();
     const data = encoder.encode(JSON.stringify(rawMetadata));
@@ -83,9 +84,8 @@ const PrivacyManager = {
     const metadataHash = '0x' + Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('');
 
     return {
-      metadataURI: ipfsResult.uri,
+      metadataURI: hashResult.uri || `sha256://${hashResult.contentHash}`,
       metadataHash,
-      cid: ipfsResult.cid,
       encrypted: false,
       timestamp: Date.now()
     };

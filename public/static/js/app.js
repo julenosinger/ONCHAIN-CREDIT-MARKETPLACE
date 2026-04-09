@@ -9,14 +9,23 @@ const AppState = {
     Toast.init();
     await loadABIs();
 
-    // Check if contracts are deployed
-    const hasContracts = Object.values(CONTRACT_ADDRESSES).every(a => a && a !== '');
+    // Check if contracts are deployed and load real onchain data
+    const hasContracts = MarketplaceEngine.hasContracts();
     
-    // Load demo data if no contracts
-    if (!hasContracts) {
-      MarketplaceEngine.credits = MarketplaceEngine.getDemoCredits();
-      MarketplaceEngine.filteredCredits = [...MarketplaceEngine.credits];
-      this.credits = MarketplaceEngine.credits;
+    if (hasContracts) {
+      // Load real credit data from deployed contracts
+      try {
+        await MarketplaceEngine.loadCredits();
+        this.credits = MarketplaceEngine.credits;
+      } catch (err) {
+        console.error('Failed to load credits from chain:', err);
+        this.credits = [];
+      }
+    } else {
+      // No contracts deployed — show empty state, no mock data
+      this.credits = [];
+      MarketplaceEngine.credits = [];
+      MarketplaceEngine.filteredCredits = [];
     }
 
     this.render();
@@ -27,7 +36,16 @@ const AppState = {
     }
   },
 
-  onWalletChange() {
+  async onWalletChange() {
+    // Reload credits from chain when wallet changes
+    if (WalletManager.connected && MarketplaceEngine.hasContracts()) {
+      try {
+        await MarketplaceEngine.loadCredits();
+        this.credits = MarketplaceEngine.credits;
+      } catch (err) {
+        console.error('Failed to refresh credits:', err);
+      }
+    }
     this.render();
     if (WalletManager.connected && this.credits.length > 0) {
       DashboardEngine.computePortfolio(this.credits, WalletManager.address);
@@ -205,11 +223,30 @@ const AppState = {
       </div>
 
       <!-- Credit Cards Grid -->
-      ${credits.length === 0 ? `
+      ${!MarketplaceEngine.hasContracts() ? `
+        <div class="empty-state">
+          <i class="fas fa-link-slash"></i>
+          <h3 class="text-lg font-semibold mt-2">Contracts Not Deployed</h3>
+          <p class="mt-1 max-w-md mx-auto">Smart contracts have not been deployed to Arc Network yet. Deploy the contracts and update the addresses in the configuration to activate the marketplace.</p>
+          <div class="flex gap-3 mt-4 justify-center">
+            <a href="${ARC_CONFIG.faucet}" target="_blank" class="btn btn-sm btn-arc"><i class="fas fa-faucet mr-1"></i>Get Testnet USDC</a>
+            <a href="${ARC_CONFIG.explorer}" target="_blank" class="btn btn-sm btn-ghost"><i class="fas fa-external-link-alt mr-1"></i>Arc Explorer</a>
+          </div>
+        </div>
+      ` : MarketplaceEngine.loading ? `
+        <div class="empty-state">
+          <i class="fas fa-spinner fa-spin"></i>
+          <h3 class="text-lg font-semibold mt-2">Loading Credit Positions...</h3>
+          <p class="mt-1">Fetching data from Arc Network contracts.</p>
+        </div>
+      ` : credits.length === 0 ? `
         <div class="empty-state">
           <i class="fas fa-inbox"></i>
-          <h3 class="text-lg font-semibold mt-2">No credit positions found</h3>
-          <p class="mt-1">Be the first to create a credit position on the marketplace.</p>
+          <h3 class="text-lg font-semibold mt-2">No Credit Positions Found</h3>
+          <p class="mt-1">No credit positions have been created on-chain yet. Be the first to create one.</p>
+          <button class="btn btn-primary mt-4" onclick="AppState.navigate('originate')">
+            <i class="fas fa-plus mr-1"></i> Create Credit Position
+          </button>
         </div>
       ` : `
         <div class="grid-3">
@@ -327,6 +364,16 @@ const AppState = {
         <button class="btn btn-lg btn-arc" onclick="WalletManager.connect()">
           <i class="fab fa-ethereum mr-2"></i> Connect Wallet
         </button>
+      </div>`;
+    }
+
+    if (!MarketplaceEngine.hasContracts()) {
+      return `
+      <div class="hero-gradient text-center py-16">
+        <i class="fas fa-tools text-5xl text-amber-500 mb-4"></i>
+        <h2 class="text-2xl font-bold mb-2">Contracts Not Deployed</h2>
+        <p class="opacity-60 mb-6 max-w-lg mx-auto">Smart contracts must be deployed to Arc Network before you can create credit positions. Deploy the contracts and configure the addresses to proceed.</p>
+        <a href="${ARC_CONFIG.explorer}" target="_blank" class="btn btn-lg btn-ghost"><i class="fas fa-external-link-alt mr-2"></i>View Arc Explorer</a>
       </div>`;
     }
 
@@ -454,6 +501,14 @@ const AppState = {
         <h2 class="text-2xl font-bold mb-2">Connect Your Wallet</h2>
         <p class="opacity-60 mb-6">View your investment portfolio and borrower positions.</p>
         <button class="btn btn-lg btn-arc" onclick="WalletManager.connect()"><i class="fab fa-ethereum mr-2"></i> Connect Wallet</button>
+      </div>`;
+    }
+
+    if (!MarketplaceEngine.hasContracts()) {
+      return `<div class="hero-gradient text-center py-16">
+        <i class="fas fa-link-slash text-5xl text-amber-500 mb-4"></i>
+        <h2 class="text-2xl font-bold mb-2">Contracts Not Deployed</h2>
+        <p class="opacity-60 mb-6 max-w-lg mx-auto">Portfolio data will be available once the smart contracts are deployed and operational on Arc Network.</p>
       </div>`;
     }
 
@@ -714,6 +769,14 @@ const AppState = {
       </div>`;
     }
 
+    if (!MarketplaceEngine.hasContracts()) {
+      return `<div class="hero-gradient text-center py-16">
+        <i class="fas fa-link-slash text-5xl text-amber-500 mb-4"></i>
+        <h2 class="text-2xl font-bold mb-2">Contracts Not Deployed</h2>
+        <p class="opacity-60 mb-6 max-w-lg mx-auto">Repayment management will be available once the smart contracts are deployed on Arc Network.</p>
+      </div>`;
+    }
+
     const borrowerPositions = DashboardEngine.getBorrowerPositions(this.credits, WalletManager.address)
       .filter(c => c.funded && !c.defaulted && !c.settled);
 
@@ -809,6 +872,11 @@ const AppState = {
   // ==========================================
   async handleCreateCredit() {
     try {
+      if (!MarketplaceEngine.hasContracts()) {
+        Toast.show('Smart contracts are not deployed yet. Deploy contracts first.', 'error');
+        return;
+      }
+
       const principal = document.getElementById('orig-principal').value;
       const repayment = document.getElementById('orig-repayment').value;
       const dueDate = document.getElementById('orig-dueDate').value;
@@ -875,6 +943,10 @@ const AppState = {
   async handleBuy(creditId, priceUSDC) {
     if (!WalletManager.connected) {
       Toast.show('Please connect your wallet first', 'warning');
+      return;
+    }
+    if (!MarketplaceEngine.hasContracts()) {
+      Toast.show('Smart contracts are not deployed yet.', 'error');
       return;
     }
 

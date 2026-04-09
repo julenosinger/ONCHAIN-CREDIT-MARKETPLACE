@@ -130,6 +130,7 @@ app.get('/api/score/:wallet', async (c) => {
 })
 
 // Privacy - encrypt metadata (using Web Crypto API for CF Workers)
+// IMPORTANT: Set METADATA_ENCRYPTION_SECRET as a Cloudflare Pages secret for production
 app.post('/api/metadata/encrypt', async (c) => {
   const { payload } = await c.req.json()
   if (!payload) return c.json({ error: 'Payload is required' }, 400)
@@ -141,7 +142,11 @@ app.post('/api/metadata/encrypt', async (c) => {
   const iv = crypto.getRandomValues(new Uint8Array(12))
 
   // Derive key from secret
-  const secret = c.env?.METADATA_ENCRYPTION_SECRET || 'onchain-credit-marketplace-default-key-2024'
+  // Use env secret in production; fallback for local dev only
+  const secret = c.env?.METADATA_ENCRYPTION_SECRET
+  if (!secret) {
+    return c.json({ error: 'Encryption secret not configured. Set METADATA_ENCRYPTION_SECRET in Cloudflare Pages secrets.' }, 500)
+  }
   const keyMaterial = await crypto.subtle.importKey(
     'raw', encoder.encode(secret), { name: 'PBKDF2' }, false, ['deriveKey']
   )
@@ -186,7 +191,10 @@ app.post('/api/metadata/decrypt', async (c) => {
     const iv = new Uint8Array(ivHex.match(/.{1,2}/g).map((byte: string) => parseInt(byte, 16)))
     const ciphertext = new Uint8Array(ciphertextHex.match(/.{1,2}/g).map((byte: string) => parseInt(byte, 16)))
 
-    const secret = c.env?.METADATA_ENCRYPTION_SECRET || 'onchain-credit-marketplace-default-key-2024'
+    const secret = c.env?.METADATA_ENCRYPTION_SECRET
+    if (!secret) {
+      return c.json({ error: 'Encryption secret not configured. Set METADATA_ENCRYPTION_SECRET in Cloudflare Pages secrets.' }, 500)
+    }
     const keyMaterial = await crypto.subtle.importKey(
       'raw', encoder.encode(secret), { name: 'PBKDF2' }, false, ['deriveKey']
     )
@@ -208,7 +216,10 @@ app.post('/api/metadata/decrypt', async (c) => {
   }
 })
 
-// IPFS simulation - store metadata with content addressing
+// Content-addressed metadata hashing (CIDv1-compatible SHA-256 hash)
+// This generates a deterministic content identifier from the data.
+// The hash can be used as a metadata URI for onchain storage.
+// For production IPFS pinning, integrate with Pinata, web3.storage, or similar.
 app.post('/api/ipfs/upload', async (c) => {
   const { data } = await c.req.json()
   if (!data) return c.json({ error: 'Data is required' }, 400)
@@ -217,14 +228,21 @@ app.post('/api/ipfs/upload', async (c) => {
   const content = encoder.encode(JSON.stringify(data))
   const hashBuffer = await crypto.subtle.digest('SHA-256', content)
   const hashArray = new Uint8Array(hashBuffer)
-  const cid = 'bafybeig' + Array.from(hashArray.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join('')
+
+  // Generate a deterministic content hash (hex-encoded SHA-256)
+  const contentHash = '0x' + Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('')
+
+  // Build a CIDv1-like identifier: multicodec(raw=0x55) + multihash(sha2-256=0x12, len=0x20) + digest
+  // This is a proper CIDv1 structure but encoded as hex for simplicity
+  const cidHex = '0155' + '1220' + Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('')
 
   return c.json({
-    cid,
-    uri: `ipfs://${cid}`,
-    gateway: `https://ipfs.io/ipfs/${cid}`,
+    contentHash,
+    cidHex,
+    uri: `sha256://${contentHash}`,
     size: content.length,
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    note: 'Content-addressed hash. For IPFS pinning, use a pinning service (Pinata, web3.storage) with this data.'
   })
 })
 
