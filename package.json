@@ -2,18 +2,22 @@
   "name": "onchain-credit-marketplace",
   "version": "1.0.0",
   "description": "Onchain Credit Marketplace on Arc Testnet",
+  "type": "module",
   "main": "index.js",
   "scripts": {
-    "clean": "rm -rf artifacts cache",
+    "clean": "rm -rf artifacts cache dist",
     "compile": "hardhat compile",
     "test": "hardhat test",
+    "build": "vite build",
+    "dev": "vite",
+    "dev:sandbox": "wrangler pages dev dist --ip 0.0.0.0 --port 3000",
+    "preview": "wrangler pages dev dist",
+    "deploy": "npm run build && wrangler pages deploy dist",
+    "deploy:prod": "npm run build && wrangler pages deploy dist --project-name onchain-credit-marketplace",
     "deploy:arc": "hardhat run scripts/deploy.js --network arcTestnet",
     "verify:arc": "hardhat run scripts/verify.js --network arcTestnet",
     "export:abi": "node scripts/export-abi.js",
-    "backend": "node backend/server.js",
-    "frontend:install": "cd frontend && npm install",
-    "frontend:dev": "cd frontend && npm run dev -- --host 0.0.0.0 --port 3000",
-    "frontend:build": "cd frontend && npm run build"
+    "backend": "node backend/server.js"
   },
   "keywords": [
     "defi",
@@ -24,9 +28,15 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260409.1",
+    "@hono/vite-cloudflare-pages": "^0.4.3",
     "@nomicfoundation/hardhat-toolbox": "^6.1.0",
     "dotenv": "^17.4.1",
-    "hardhat": "^2.28.0"
+    "hardhat": "^2.28.0",
+    "hono": "^4.12.12",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.7",
+    "wrangler": "^4.81.0"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^4.9.6",

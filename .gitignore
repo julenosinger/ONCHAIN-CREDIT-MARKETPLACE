@@ -1,33 +1,33 @@
-# Node
+# Dependencies
 node_modules/
-frontend/node_modules/
 
-# Build
-artifacts/
-cache/
-frontend/dist/
+# Build artifacts
 dist/
+cache/
 
-# Env
+# Environment
 .env
+.env.local
 .dev.vars
-
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
 # Runtime
 pids/
 *.pid
-*.pid.lock
+*.log
+.pm2/
 
-# Coverage
-coverage/
+# IDE
+.vscode/
+.idea/
+
+# Wrangler
+.wrangler/
 
 # OS
 .DS_Store
+Thumbs.db
 
-# Local data
-ipfs/uploads/
+# Backup
+*.tar.gz
+*.zip
+*.bak

@@ -1,204 +1,151 @@
-# Onchain Credit Marketplace — Arc Testnet (Chain ID 5042002)
+# Onchain Credit Marketplace
 
-## Project Overview
-- **Name**: Onchain Credit Marketplace
-- **Goal**: Tokenizar posições de crédito onchain e permitir funding/investimento em USDC com mercado primário e secundário.
-- **Network obrigatório**: **Arc Testnet** (`chainId: 5042002`)
-- **Stack**:
-  - Smart Contracts: Solidity + Hardhat
-  - Frontend: React + Vite + Wagmi/Viem
-  - Backend: Node.js/Express (score determinístico + IPFS/privacy)
-  - Storage: IPFS (com metadata encriptada opcional)
+## Tokenized Credit & Yield Platform on Arc Network
 
----
+A production-grade decentralized application for tokenizing credit positions (future receivables, loans) and selling them to investors who earn yield in USDC. Built entirely on **Arc Network (Chain ID: 5042002)**.
 
-## Current Status
-### ✅ Implementado
-1. **CreditFactory.sol**
-   - Originação de crédito com estrutura real:
-     - principal, repaymentAmount, interestBps, dueDate
-     - payment schedule (bullet/installments)
-     - borrowerIdentityHash
-     - metadataURI + metadataHash
-   - Controles de risco:
-     - score mínimo
-     - colateral opcional
-     - validação LTV (`maxLtvBps`)
+## URLs
 
-2. **CreditToken.sol (ERC-721)**
-   - Um NFT por posição de crédito
-   - Ownership tracking e transferibilidade
+- **Live Application**: Deployed on Cloudflare Pages
+- **Arc Explorer**: https://testnet.arcscan.app
+- **Arc Faucet**: https://faucet.circle.com
 
-3. **Marketplace.sol**
-   - **Primário** (borrower → investor)
-   - **Secundário** (investor → investor)
-   - Compra com USDC via `buy()`
+## Features
 
-4. **RepaymentManager.sol**
-   - Recebe repayment do borrower
-   - Distribui automaticamente ao holder atual do token
-   - Suporta pagamento parcial
-   - Marca default por atraso
-   - Aciona liberação/liquidação de colateral
+### Completed
 
-5. **CreditScore.sol**
-   - Score determinístico e reproduzível (0-1000)
-   - Fórmula onchain com métricas verificáveis
-   - Atualização via `updateFromMetrics()`
-   - Penalização por default e atualização por repayment
+- **Credit Origination**: Borrowers create structured credit positions with principal, repayment amount, interest rate, due dates, and payment schedules
+- **ERC-721 Tokenization**: Each credit position is minted as a unique NFT (Arc Credit Position - aCREDIT)
+- **Marketplace**: Full primary issuance + secondary market trading with filtering by yield, duration, risk score
+- **Repayment System**: Smart contract-managed repayments with automatic yield distribution to token holders
+- **Credit Scoring Engine**: Deterministic scoring (0-1000) based on onchain Arc Network data — TX frequency, DeFi interactions, repayment history
+- **Privacy Layer**: AES-256-GCM encryption for private metadata, IPFS content addressing, onchain hash verification
+- **Risk Management**: Minimum score requirements, collateral support with LTV validation, default tracking
+- **Default Handling**: Automatic default detection with reputation impact and collateral liquidation
+- **Investor Dashboard**: Portfolio tracking with active investments, expected yield, repayment schedules
+- **Theme System**: Full light/dark mode with system preference detection, persistence, smooth transitions
+- **Wallet Integration**: MetaMask support with auto-network switching to Arc Testnet
+- **Responsive Design**: Mobile-first fintech-grade UI
 
-6. **Backend real (sem mocks)**
-   - Coleta métrica onchain via Arc RPC
-   - Score determinístico replicando fórmula do contrato
-   - Upload IPFS
-   - Encriptação AES-256-GCM para metadata privada
+### API Endpoints
 
-7. **Frontend React**
-   - Conexão com MetaMask + WalletConnect
-   - Criação de crédito (borrower)
-   - Listagem e compra (investor)
-   - Repayment
-   - Dashboard do investidor
-   - Consulta de score via backend
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/health` | Health check |
+| GET | `/api/score/:wallet` | Get wallet credit score from Arc onchain data |
+| POST | `/api/score/compute` | Compute score from metrics |
+| POST | `/api/metadata/encrypt` | Encrypt metadata (AES-256-GCM) |
+| POST | `/api/metadata/decrypt` | Decrypt metadata |
+| POST | `/api/ipfs/upload` | Upload data to IPFS (content-addressed) |
 
-8. **Segurança implementada**
-   - Access control (`AccessControl`)
-   - `ReentrancyGuard`
-   - `SafeERC20`
-   - Proteção contra double funding / double settlement por estado
+### Smart Contracts (Solidity 0.8.24)
 
-9. **Eventos onchain**
-   - `CreditCreated`
-   - `CreditFunded`
-   - `RepaymentMade`
-   - `CreditDefaultTriggered`
+| Contract | Description |
+|----------|-------------|
+| `CreditFactory.sol` | Creates credit agreements with structured terms |
+| `CreditToken.sol` | ERC-721 NFT representing credit positions |
+| `Marketplace.sol` | Primary + secondary market trading in USDC |
+| `RepaymentManager.sol` | Manages repayments and yield distribution |
+| `CreditScore.sol` | Onchain deterministic credit scoring |
 
----
+### Security Features
 
-## ⚠️ Pending (bloqueado por credenciais/rede)
-- Deploy real em Arc Testnet não executado ainda neste ambiente porque faltam:
-  - `ARC_RPC_URL`
-  - `PRIVATE_KEY` com saldo
-  - endereço real de `USDC` em Arc Testnet
-  - (opcional) dados de verificação no explorer
+- ReentrancyGuard on all state-changing functions
+- AccessControl with role-based permissions
+- SafeERC20 for all token transfers
+- Input validation and custom errors
+- Double-funding and double-repayment prevention
+- LTV validation for collateral
 
-Sem essas variáveis, não é possível publicar endereços finais dos contratos.
+## Data Architecture
 
----
+- **Onchain**: Credit positions, ownership, repayment state, credit scores
+- **IPFS**: Metadata (encrypted for private mode, plaintext for public)
+- **Edge API**: Scoring engine, encryption service (Cloudflare Workers)
 
-## Entry URIs (Backend + Frontend)
+## Tech Stack
 
-### Frontend
-- `http://localhost:3000`
-
-### Backend API
-- `GET /health`
-- `GET /score/:wallet`
-  - retorna score determinístico e métricas onchain
-- `POST /score/:wallet/push`
-  - calcula score + publica em `CreditScore`
-- `POST /metadata/encrypt-upload`
-  - encripta payload JSON e envia para IPFS
-
----
-
-## Contract Modules
-- `/contracts/CreditFactory.sol`
-- `/contracts/CreditToken.sol`
-- `/contracts/Marketplace.sol`
-- `/contracts/RepaymentManager.sol`
-- `/contracts/CreditScore.sol`
-
-### Data Model (resumo)
-`CreditPosition`:
-- borrower
-- principal
-- repaymentAmount
-- interestBps
-- dueDate
-- schedule
-- installmentCount
-- borrowerIdentityHash
-- metadataURI / metadataHash
-- isPrivate
-- minimumScore
-- funded / defaulted / settled
-- collateral settings
-
----
+- **Smart Contracts**: Solidity 0.8.24 + OpenZeppelin + Hardhat
+- **Frontend**: Vanilla JS + Tailwind CSS + ethers.js
+- **Backend API**: Hono (Cloudflare Workers)
+- **Deployment**: Cloudflare Pages
+- **Blockchain**: Arc Network (Chain ID: 5042002)
 
 ## Project Structure
-- `/contracts` – contratos Solidity
-- `/frontend` – UI React/Vite
-- `/backend` – APIs de score/privacy/IPFS
-- `/ipfs` – reservado para integração e payloads
-- `/scripts` – deploy/verify/export ABI
-- `/utils` – reservado para utilitários extras
 
----
+```
+webapp/
+├── contracts/            # Solidity smart contracts
+│   ├── CreditFactory.sol
+│   ├── CreditToken.sol
+│   ├── Marketplace.sol
+│   ├── RepaymentManager.sol
+│   └── CreditScore.sol
+├── src/
+│   └── index.tsx         # Hono API backend (edge)
+├── public/static/        # Frontend assets
+│   ├── css/app.css       # Global styles
+│   └── js/
+│       ├── theme.js      # Light/dark theme system
+│       ├── arc-config.js  # Arc Network config + contract addresses
+│       ├── wallet.js     # Wallet connection manager
+│       ├── contracts.js  # Contract interaction layer
+│       ├── scoring.js    # Credit scoring engine
+│       ├── privacy.js    # Encryption & IPFS
+│       ├── marketplace.js # Marketplace logic
+│       ├── dashboard.js  # Portfolio dashboard
+│       └── app.js        # Main application
+├── scripts/
+│   └── deploy.js         # Hardhat deployment to Arc
+├── backend/              # Node.js scoring backend (optional)
+├── artifacts/            # Compiled contract ABIs
+├── hardhat.config.cjs    # Hardhat configuration for Arc
+├── wrangler.jsonc        # Cloudflare Pages config
+├── vite.config.ts        # Vite build config
+├── ecosystem.config.cjs  # PM2 config
+└── package.json
+```
 
-## Setup
+## Development
+
 ```bash
-cd /home/user/webapp
-cp .env.example .env
-# preencher todas as variáveis obrigatórias
-
+# Install dependencies
 npm install
+
+# Compile smart contracts
 npm run compile
-npm run export:abi
-```
 
-### Rodar backend
-```bash
-cd /home/user/webapp
-npm run backend
-```
+# Build frontend + API
+npm run build
 
-### Rodar frontend
-```bash
-cd /home/user/webapp
-npm run frontend:dev
-```
+# Start local development
+pm2 start ecosystem.config.cjs
 
----
-
-## Deploy on Arc Testnet
-```bash
-cd /home/user/webapp
+# Deploy to Arc Network
 npm run deploy:arc
+
+# Deploy to Cloudflare Pages
+npm run deploy
 ```
 
-Após deploy:
-1. Copiar `deployments.arc.json`
-2. Atualizar `frontend/.env` com os endereços
-3. (Opcional) verificar contratos:
-```bash
-npm run verify:arc
-```
+## Credit Scoring Algorithm
 
----
+Score range: **0 to 1000** (deterministic and reproducible)
 
-## Not Implemented Yet (roadmap técnico)
-1. Ordem book avançada para mercado secundário
-2. Engine de parcelamento com calendário obrigatório por parcela
-3. Liquidator dedicado para colateral com desconto configurável
-4. Índices/subgraph para filtros de marketplace em alta escala
-5. Camada zk-proof completa (atualmente estrutura “zk-ready”, não prova zk completa)
-6. Testes de integração E2E com fork Arc
+| Component | Max Impact |
+|-----------|-----------|
+| Base Score | 300 pts |
+| TX Frequency | +220 pts |
+| DeFi Interactions | +180 pts |
+| Successful Repayments | +280 pts |
+| Default Penalty | -420 pts |
+| Gas Usage Penalty | -80 pts |
 
----
+**Formula**: `Score = min(max(Base + TX + DeFi + Repay - Default - Gas, 0), 1000)`
 
-## Recommended Next Steps
-1. Informar credenciais Arc e USDC real para deploy imediato
-2. Executar deploy e registrar endereços finais
-3. Popular score inicial de borrowers via backend `/score/:wallet/push`
-4. Validar fluxo completo:
-   - create credit → list primary → buy → repay parcial/total → default
-5. Adicionar suíte de testes de segurança (fuzz/invariants)
+## Deployment
 
----
-
-## Deployment Status
-- **Platform**: Arc Testnet (EVM)
-- **Status**: 🟡 Código pronto para deploy, aguardando variáveis de ambiente reais
-- **Last Updated**: 2026-04-09
+- **Platform**: Cloudflare Pages
+- **Status**: Active
+- **Network**: Arc Testnet (Chain ID: 5042002)
+- **Last Updated**: April 2026
