@@ -1,0 +1,33 @@
+# Node
+node_modules/
+frontend/node_modules/
+
+# Build
+artifacts/
+cache/
+frontend/dist/
+dist/
+
+# Env
+.env
+.dev.vars
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime
+pids/
+*.pid
+*.pid.lock
+
+# Coverage
+coverage/
+
+# OS
+.DS_Store
+
+# Local data
+ipfs/uploads/
