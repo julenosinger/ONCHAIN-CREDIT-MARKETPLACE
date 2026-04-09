@@ -6,9 +6,21 @@ A production-grade decentralized application for tokenizing credit positions (fu
 
 ## URLs
 
-- **Live Application**: Deployed on Cloudflare Pages
+- **Live Application**: https://onchain-credit-marketplace.pages.dev/
 - **Arc Explorer**: https://testnet.arcscan.app
 - **Arc Faucet**: https://faucet.circle.com
+- **GitHub**: https://github.com/julenosinger/ONCHAIN-CREDIT-MARKETPLACE
+
+## Deployed Contract Addresses (Arc Testnet)
+
+| Contract | Address |
+|----------|---------|
+| USDC (Native) | `0x3600000000000000000000000000000000000000` |
+| CreditToken | [`0xa112cc3B4c4B1518fF07bbF2F6E84C404c699165`](https://testnet.arcscan.app/address/0xa112cc3B4c4B1518fF07bbF2F6E84C404c699165) |
+| CreditScore | [`0x172787626C50490E983008d798A45D9461C97a04`](https://testnet.arcscan.app/address/0x172787626C50490E983008d798A45D9461C97a04) |
+| CreditFactory | [`0x425BFa41161C787BAF08C6615c2d92044a813DD4`](https://testnet.arcscan.app/address/0x425BFa41161C787BAF08C6615c2d92044a813DD4) |
+| RepaymentManager | [`0x2bc1F0E41F1F2F8708a7dF2E138634cf0F101022`](https://testnet.arcscan.app/address/0x2bc1F0E41F1F2F8708a7dF2E138634cf0F101022) |
+| Marketplace | [`0x71A8bC79E6a64f2dc39F0479be9CdE9885a91C1f`](https://testnet.arcscan.app/address/0x71A8bC79E6a64f2dc39F0479be9CdE9885a91C1f) |
 
 ## Features
 
