@@ -18,14 +18,14 @@ const ARC_CONFIG = {
   }
 };
 
-// Contract addresses — MUST be updated after deployment
+// Contract addresses — Deployed on Arc Testnet (2026-04-09)
 const CONTRACT_ADDRESSES = {
-  usdc: '',
-  creditFactory: '',
-  creditToken: '',
-  marketplace: '',
-  repaymentManager: '',
-  creditScore: ''
+  usdc: '0x3600000000000000000000000000000000000000',
+  creditFactory: '0x425BFa41161C787BAF08C6615c2d92044a813DD4',
+  creditToken: '0xa112cc3B4c4B1518fF07bbF2F6E84C404c699165',
+  marketplace: '0x71A8bC79E6a64f2dc39F0479be9CdE9885a91C1f',
+  repaymentManager: '0x2bc1F0E41F1F2F8708a7dF2E138634cf0F101022',
+  creditScore: '0x172787626C50490E983008d798A45D9461C97a04'
 };
 
 // Contract ABIs will be loaded dynamically

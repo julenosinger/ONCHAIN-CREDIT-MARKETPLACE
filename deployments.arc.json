@@ -1,0 +1,24 @@
+{
+  "network": "arcTestnet",
+  "chainId": 5042002,
+  "deployer": "0x6373838042758bB1bB40Ba5E0e3B64EB20A2100F",
+  "usdc": "0x3600000000000000000000000000000000000000",
+  "contracts": {
+    "creditToken": "0xa112cc3B4c4B1518fF07bbF2F6E84C404c699165",
+    "creditScore": "0x172787626C50490E983008d798A45D9461C97a04",
+    "creditFactory": "0x425BFa41161C787BAF08C6615c2d92044a813DD4",
+    "repaymentManager": "0x2bc1F0E41F1F2F8708a7dF2E138634cf0F101022",
+    "marketplace": "0x71A8bC79E6a64f2dc39F0479be9CdE9885a91C1f"
+  },
+  "roles": {
+    "minterRole": "0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6",
+    "marketplaceRole": "0x0ea61da3a8a09ad801432653699f8c1860b1ae9d2ea4a141fadfd63227717bc8",
+    "repaymentManagerRole": "0x93714ee7e3775f280f9ab925a5b649b6e87f18ae11f75082555fc719f33f9766"
+  },
+  "config": {
+    "platformMinScore": 0,
+    "defaultGracePeriod": 259200
+  },
+  "timestamp": "2026-04-09T02:20:31.825Z",
+  "blockNumber": 36221518
+}
