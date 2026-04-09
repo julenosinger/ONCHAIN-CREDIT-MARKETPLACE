@@ -877,6 +877,11 @@ const AppState = {
         return;
       }
 
+      if (!WalletManager.connected || !WalletManager.signer) {
+        Toast.show('Please connect your wallet first.', 'warning');
+        return;
+      }
+
       const principal = document.getElementById('orig-principal').value;
       const repayment = document.getElementById('orig-repayment').value;
       const dueDate = document.getElementById('orig-dueDate').value;
@@ -887,15 +892,67 @@ const AppState = {
       const isPrivate = document.getElementById('orig-private').checked;
       const requireCollateral = document.getElementById('orig-collateral').checked;
 
+      // === Frontend validation ===
       if (!principal || !repayment || !dueDate) {
-        Toast.show('Please fill in all required fields', 'warning');
+        Toast.show('Please fill in all required fields: Principal, Repayment Amount, and Due Date.', 'warning');
+        return;
+      }
+
+      if (parseFloat(principal) <= 0) {
+        Toast.show('Principal must be greater than 0.', 'warning');
         return;
       }
 
       if (parseFloat(repayment) <= parseFloat(principal)) {
-        Toast.show('Repayment amount must exceed principal', 'warning');
+        Toast.show('Repayment amount must be greater than principal (to include interest/yield).', 'warning');
         return;
       }
+
+      const dueDateTs = Math.floor(new Date(dueDate).getTime() / 1000);
+      const nowTs = Math.floor(Date.now() / 1000);
+      if (dueDateTs <= nowTs) {
+        Toast.show('Due date must be in the future.', 'warning');
+        return;
+      }
+
+      // Collateral-specific validation
+      if (requireCollateral) {
+        const collToken = document.getElementById('orig-collToken')?.value;
+        const collAmount = document.getElementById('orig-collAmount')?.value;
+        const collVal = document.getElementById('orig-collVal')?.value;
+        const maxLtv = document.getElementById('orig-maxLtv')?.value;
+
+        if (!collToken || collToken.trim() === '' || !collToken.startsWith('0x') || collToken.length !== 42) {
+          Toast.show('Please enter a valid collateral token address (0x... format, 42 characters).', 'warning');
+          return;
+        }
+        if (!collAmount || parseFloat(collAmount) <= 0) {
+          Toast.show('Collateral amount must be greater than 0.', 'warning');
+          return;
+        }
+        if (!collVal || parseFloat(collVal) <= 0) {
+          Toast.show('Collateral valuation (USDC) must be greater than 0. This is the USDC value of the collateral.', 'warning');
+          return;
+        }
+        if (!maxLtv || parseInt(maxLtv) <= 0 || parseInt(maxLtv) > 10000) {
+          Toast.show('Max LTV must be between 1 and 10000 basis points (0.01% to 100%).', 'warning');
+          return;
+        }
+
+        // LTV check
+        const principalUSDC = parseFloat(principal);
+        const valuationUSDC = parseFloat(collVal);
+        const ltvBps = parseInt(maxLtv);
+        if (principalUSDC * 10000 > valuationUSDC * ltvBps) {
+          const maxPrincipal = (valuationUSDC * ltvBps / 10000).toFixed(2);
+          Toast.show(`Principal (${principalUSDC} USDC) exceeds max LTV ratio. With ${valuationUSDC} USDC collateral at ${(ltvBps/100).toFixed(0)}% LTV, max principal is ${maxPrincipal} USDC.`, 'warning');
+          return;
+        }
+      }
+
+      // Disable button
+      const btn = document.getElementById('create-credit-btn');
+      if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...'; }
 
       Toast.show('Processing metadata...', 'info');
 
@@ -913,7 +970,7 @@ const AppState = {
       const params = {
         principal: ContractManager.toUSDC(principal),
         repaymentAmount: ContractManager.toUSDC(repayment),
-        dueDate: BigInt(Math.floor(new Date(dueDate).getTime() / 1000)),
+        dueDate: BigInt(dueDateTs),
         schedule: Number(schedule),
         installmentCount: Number(schedule) === 1 ? Math.max(Number(installments), 2) : 1,
         borrowerIdentityHash: identityHash,
@@ -932,11 +989,25 @@ const AppState = {
       Toast.show('Submitting transaction to Arc Network...', 'info');
 
       const receipt = await ContractManager.createCredit(params);
-      Toast.show(`Credit created! TX: ${receipt.hash.slice(0, 12)}...`, 'success');
+      Toast.show(`Credit position created successfully! TX: ${receipt.hash.slice(0, 16)}...`, 'success');
+
+      // Reload marketplace data
+      try {
+        await MarketplaceEngine.loadCredits();
+        this.credits = MarketplaceEngine.credits;
+      } catch {}
+
       this.navigate('marketplace');
     } catch (err) {
       console.error('Create credit error:', err);
-      Toast.show(err.shortMessage || err.message || 'Transaction failed', 'error');
+      const errorMsg = err.message || 'Transaction failed';
+      // Show first line of error if multi-line
+      const firstLine = errorMsg.split('\n')[0];
+      Toast.show(firstLine, 'error');
+    } finally {
+      // Re-enable button
+      const btn = document.getElementById('create-credit-btn');
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-rocket"></i> Create Credit Position'; }
     }
   },
 
